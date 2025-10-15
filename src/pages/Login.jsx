@@ -5,37 +5,35 @@ import { authAPI } from '../services/api';
 export default function Login() {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
-  const formData = new URLSearchParams();
-  formData.append('username', credentials.username);
-  formData.append('password', credentials.password);
+    const formData = new URLSearchParams();
+    formData.append('username', credentials.username);
+    formData.append('password', credentials.password);
 
-  try {
-    const { data } = await authAPI.login(formData);
-    console.log('Admin login success:', data);
-    localStorage.setItem('token', data.access_token);
-    localStorage.setItem('userType', 'admin');
-    navigate('/dashboard');
-    return;
-  } catch (adminError) {
-    console.log('Admin login failed, trying customer...');
     try {
-      const { data } = await authAPI.customerLogin(formData);
-      console.log('Customer login success:', data);
+      const { data } = await authAPI.login(formData);
       localStorage.setItem('token', data.access_token);
-      localStorage.setItem('userType', 'customer');
-      navigate('/customer/dashboard');
-    } catch (customerError) {
-      console.error('Both logins failed:', customerError);
-      setError('Credenciales incorrectas');
+      localStorage.setItem('userType', 'admin');
+      window.location.href = '/dashboard';
+    } catch (adminError) {
+      try {
+        const { data } = await authAPI.customerLogin(formData);
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('userType', 'customer');
+        window.location.href = '/customer/dashboard';
+      } catch (customerError) {
+        setError('Credenciales incorrectas');
+        setLoading(false);
+      }
     }
-  }
-};
+  };
 
   return (
     <div style={{ 
@@ -94,6 +92,7 @@ export default function Login() {
             <input
               type="email"
               required
+              disabled={loading}
               value={credentials.username}
               onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
               style={{
@@ -114,6 +113,7 @@ export default function Login() {
             <input
               type="password"
               required
+              disabled={loading}
               value={credentials.password}
               onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
               style={{
@@ -129,38 +129,21 @@ export default function Login() {
 
           <button
             type="submit"
+            disabled={loading}
             style={{
               width: '100%',
               padding: '0.875rem',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: loading ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               color: 'white',
               border: 'none',
               borderRadius: '0.5rem',
               fontSize: '1rem',
               fontWeight: '600',
-              cursor: 'pointer'
+              cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            Iniciar Sesión
+            {loading ? 'Ingresando...' : 'Iniciar Sesión'}
           </button>
-
-          <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-            <span style={{ color: '#6b7280' }}>¿No tienes cuenta? </span>
-            <button
-              type="button"
-              onClick={() => navigate('/register')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#667eea',
-                fontWeight: '600',
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              Regístrate aquí
-            </button>
-          </div>
         </form>
       </div>
     </div>

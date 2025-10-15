@@ -18,17 +18,17 @@ export default function CustomerPayments() {
   }, []);
 
   const loadLoans = async () => {
-  try {
-    const { data } = await customerPortalAPI.getMyLoans();
-    console.log('Loans data:', data); // DEBUG
-    const activeLoans = data.filter(l => l.status === 'active' || l.status === 'approved');
-    console.log('Active loans:', activeLoans); // DEBUG
-    console.log('First loan schedule:', activeLoans[0]?.payment_schedule); // DEBUG
-    setLoans(activeLoans);
-  } catch (error) {
-    console.error(error);
-  }
-};
+    try {
+      const { data } = await customerPortalAPI.getMyLoans();
+      console.log('Loans data:', data); // DEBUG
+      const activeLoans = data.filter(l => l.status === 'active' || l.status === 'approved');
+      console.log('Active loans:', activeLoans); // DEBUG
+      console.log('First loan schedule:', activeLoans[0]?.payment_schedule); // DEBUG
+      setLoans(activeLoans);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,13 +39,34 @@ export default function CustomerPayments() {
 
     const loan = loans.find(l => l.id === selectedLoan);
     const installment = loan.payment_schedule.find(p => p.id === selectedInstallment);
+    
+    // Cálculo del monto pendiente (total - pagado)
+    const paidAmount = parseFloat(installment.paid_amount) || 0;
+    const amountToPay = parseFloat(installment.total_amount) - paidAmount;
+    
+    if (amountToPay <= 0) {
+      alert('Error: La cuota seleccionada ya está pagada o el monto pendiente es cero.');
+      loadLoans(); // Recarga para limpiar si es un error de UI/Cache
+      return;
+    }
+
+    // DEBUG - Agrega estas líneas
+    console.log('Token:', localStorage.getItem('token'));
+    console.log('Payload:', {
+      loan_id: selectedLoan,
+      schedule_id: selectedInstallment,
+      amount: amountToPay.toFixed(2), // Usamos el monto pendiente
+      payment_date: new Date().toISOString().split('T')[0], // Usamos la fecha actual para el pago
+      ...paymentData
+    });
 
     try {
       await paymentsAPI.create({
         loan_id: selectedLoan,
         schedule_id: selectedInstallment,
-        amount: installment.total_amount,
-        payment_date: installment.due_date,
+        amount: amountToPay.toFixed(2), // Enviamos el monto pendiente
+        // Mejor usar la fecha actual para la transacción
+        payment_date: new Date().toISOString().split('T')[0], 
         ...paymentData
       });
 
@@ -57,15 +78,26 @@ export default function CustomerPayments() {
         reference_number: '',
         notes: ''
       });
-      loadLoans();
+      // Importante: Volvemos a cargar los préstamos para refrescar la lista de cuotas
+      loadLoans(); 
     } catch (error) {
+      console.error('Error completo:', error); // DEBUG
       alert('Error al registrar pago: ' + (error.response?.data?.detail || 'Error desconocido'));
     }
   };
 
   const selectedLoanData = loans.find(l => l.id === selectedLoan);
-  const pendingInstallments = selectedLoanData?.payment_schedule?.filter(p => p.status === 'pending') || [];
+  // FILTRO CORREGIDO: Incluye 'pending' y 'partial' para permitir pagos restantes.
+  const pendingInstallments = selectedLoanData?.payment_schedule?.filter(
+    p => p.status === 'pending' || p.status === 'partial'
+  ) || [];
+  
   const selectedInstallmentData = pendingInstallments.find(p => p.id === selectedInstallment);
+  
+  // Cálculo del monto pendiente para mostrar en el detalle
+  const displayAmount = selectedInstallmentData 
+    ? parseFloat(selectedInstallmentData.total_amount) - (parseFloat(selectedInstallmentData.paid_amount) || 0)
+    : 0;
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
@@ -179,7 +211,9 @@ export default function CustomerPayments() {
                   <option value="">-- Selecciona una cuota pendiente --</option>
                   {pendingInstallments.map(inst => (
                     <option key={inst.id} value={inst.id}>
-                      Cuota #{inst.installment_number} - Vence: {new Date(inst.due_date).toLocaleDateString('es-PE')} - S/ {parseFloat(inst.total_amount).toFixed(2)}
+                      Cuota #{inst.installment_number} - Vence: {new Date(inst.due_date).toLocaleDateString('es-PE')} - Pendiente: S/ {
+                        (parseFloat(inst.total_amount) - (parseFloat(inst.paid_amount) || 0)).toFixed(2)
+                      }
                     </option>
                   ))}
                 </select>
@@ -201,7 +235,7 @@ export default function CustomerPayments() {
                 border: '2px solid #0ea5e9'
               }}>
                 <h3 style={{ marginBottom: '1rem', color: '#0369a1', fontSize: '1.125rem', fontWeight: 'bold' }}>
-                  📋 Detalle de la Cuota
+                  📋 Detalle de la Cuota (Monto Pendiente)
                 </h3>
                 <div style={{ 
                   display: 'grid', 
@@ -210,21 +244,25 @@ export default function CustomerPayments() {
                   marginBottom: '1rem' 
                 }}>
                   <div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Fecha de Pago</p>
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Fecha Vencimiento</p>
                     <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>
                       {new Date(selectedInstallmentData.due_date).toLocaleDateString('es-PE')}
                     </p>
                   </div>
                   <div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Capital</p>
-                    <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                      S/ {parseFloat(selectedInstallmentData.principal_amount).toFixed(2)}
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Capital Pendiente</p>
+                    {/* Nota: Mostrar el desglose exacto de capital e interés pendiente es complejo si hubo pagos parciales,
+                        ya que el pago parcial se aplica primero a interés. Por ahora, solo mostramos el total. 
+                        Tu backend maneja la lógica de aplicación internamente.
+                    */}
+                    <p style={{ fontWeight: 'bold', fontSize: '1rem', color: '#6b7280' }}>
+                      (Ver en Cronograma)
                     </p>
                   </div>
                   <div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Interés</p>
-                    <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                      S/ {parseFloat(selectedInstallmentData.interest_amount).toFixed(2)}
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>Interés Pendiente</p>
+                    <p style={{ fontWeight: 'bold', fontSize: '1rem', color: '#6b7280' }}>
+                      (Ver en Cronograma)
                     </p>
                   </div>
                 </div>
@@ -234,15 +272,15 @@ export default function CustomerPayments() {
                   borderRadius: '0.5rem',
                   textAlign: 'center'
                 }}>
-                  <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>Total a Pagar</p>
+                  <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>Total Pendiente a Pagar</p>
                   <p style={{ fontWeight: 'bold', fontSize: '2rem', color: '#0369a1' }}>
-                    S/ {parseFloat(selectedInstallmentData.total_amount).toFixed(2)}
+                    S/ {displayAmount.toFixed(2)}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Información del pago */}
+            {/* Información del pago (método, referencia, notas) */}
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#1f2937' }}>
@@ -310,12 +348,12 @@ export default function CustomerPayments() {
 
               <div style={{
                 padding: '1rem',
-                background: '#fef3c7',
+                background: '#e0f7f4', // Color más neutral, ya que ahora es automático
                 borderRadius: '0.5rem',
-                border: '1px solid #fbbf24'
+                border: '1px solid #10b981'
               }}>
-                <p style={{ fontSize: '0.875rem', color: '#92400e' }}>
-                  ⚠️ <strong>Importante:</strong> Una vez registrado el pago, el administrador lo verificará y actualizará tu cronograma.
+                <p style={{ fontSize: '0.875rem', color: '#065f46' }}>
+                  ✅ <strong>Notificación:</strong> El pago se registra y se aplica automáticamente al cronograma.
                 </p>
               </div>
 
@@ -343,7 +381,7 @@ export default function CustomerPayments() {
                   if (selectedInstallment) e.target.style.transform = 'scale(1)';
                 }}
               >
-                💰 Registrar Pago
+                💰 Registrar Pago por S/ {displayAmount.toFixed(2)}
               </button>
             </div>
           </form>

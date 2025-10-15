@@ -41,8 +41,9 @@ export default function CustomerDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    navigate('/login');
+  localStorage.removeItem('token');
+  localStorage.removeItem('userType');
+  window.location.href = '/login';
 };
 
   const statusColors = {

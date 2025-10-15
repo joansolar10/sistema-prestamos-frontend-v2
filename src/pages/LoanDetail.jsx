@@ -38,7 +38,8 @@ export default function LoanDetail() {
     const installment = loan.payment_schedule.find(p => p.id === selectedInstallment);
     
     try {
-      await paymentsAPI.create({
+      // CAMBIO: Usar createAdmin para el rol de administrador
+      await paymentsAPI.createAdmin({ 
         loan_id: id,
         schedule_id: selectedInstallment,
         amount: installment.total_amount,
@@ -70,7 +71,7 @@ export default function LoanDetail() {
     }}>
       <div style={{ fontSize: '1.5rem', color: '#667eea', fontWeight: 'bold' }}>
         Cargando...
-      </div>
+        </div>
     </div>
   );
 
@@ -255,7 +256,7 @@ export default function LoanDetail() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </div> // <-- CORRECCIÓN: Agregado el </div> que faltaba aquí
             )}
 
             <input 
