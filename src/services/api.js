@@ -1,9 +1,8 @@
 import axios from 'axios';
 
-// Usaremos la variable de entorno. La URL DEBE ser: http://127.0.0.1:8000/api
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000/api';
+// CORRECCIÓN: Remover /api del baseURL porque el backend no usa ese prefijo
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 
-// LOG DE DEBUG
 console.log('🔧 API_URL configurada como:', API_URL);
 
 const api = axios.create({
@@ -14,17 +13,14 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   
-  // Lista de rutas que NO requieren token (login/register)
   const isAuthRequest = config.url.includes('/auth/login') || 
                         config.url.includes('/auth/customer/login') || 
                         config.url.includes('/auth/register');
   
   if (token && !isAuthRequest) {
-    // Esto es lo que resuelve el 401 (Unauthorized) al enviar el token.
-    config.headers.Authorization = `Bearer ${token}`; 
+    config.headers.Authorization = `Bearer ${token}`;
   }
   
-  // El log debería mostrar: http://127.0.0.1:8000/api/payments/admin
   console.log('📤 Request:', config.method.toUpperCase(), config.baseURL + config.url);
   
   return config;
@@ -38,10 +34,7 @@ api.interceptors.response.use(
                           error.config?.url?.includes('/auth/customer/login') || 
                           error.config?.url?.includes('/auth/register');
     
-    // Si obtenemos 401 y no es un intento de login/registro, redirigir
-    // Esta lógica es la que podría causar un loop si falla la carga inicial de datos.
     if (error.response?.status === 401 && !isAuthRequest) {
-      console.error("401 Unauthorized. Clearing session and redirecting to login.");
       localStorage.clear();
       window.location.href = '/login';
     }
@@ -89,8 +82,7 @@ export const customerPortalAPI = {
 
 export const paymentsAPI = {
   getByLoan: (loanId) => api.get(`/payments/loan/${loanId}`),
-  create: (data) => api.post('/payments/', data), 
-  // Esto ahora apuntará a /api/payments/admin si la baseURL es /api
+  create: (data) => api.post('/payments/', data),
   createAdmin: (data) => api.post('/payments/admin', data),
   approve: (paymentId) => api.put(`/payments/${paymentId}/approve`),
   reject: (paymentId) => api.put(`/payments/${paymentId}/reject`),
