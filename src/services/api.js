@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // CORRECCIÓN: Remover /api del baseURL porque el backend no usa ese prefijo
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://prestamos-api-6a81.onrender.com';
 
 console.log('🔧 API_URL configurada como:', API_URL);
 
